@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Bekleidungs-Shop</title>
+
+    <!-- Bootstrap CSS -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+        crossorigin="anonymous"
+    >
+</head>
+<body class="bg-light">
+
+<!-- NAVBAR -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+
+        <!-- LINKS: Logout -->
+        <div class="d-flex align-items-center">
+            <button id="logoutBtn" class="btn btn-outline-light btn-sm">
+                Logout
+            </button>
+        </div>
+
+        <!-- MITTE: Titel -->
+        <span class="navbar-brand mx-auto position-absolute start-50 translate-middle-x">
+      Bekleidungs-Shop
+    </span>
+
+        <!-- RECHTS: Navigation -->
+        <div class="collapse navbar-collapse justify-content-end">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link active" href="shop.html">Shop</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="products.html">Admin (Produkte)</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="orders.html">Bestellungen</a>
+                </li>
+            </ul>
+        </div>
+
+    </div>
+</nav>
+
+<div class="container py-4">
+
+    <h1 class="mb-4">Produkte</h1>
+
+    <!-- Meldungen -->
+    <div id="message" class="alert d-none" role="alert"></div>
+
+    <!-- Filter / Sortierung -->
+    <div class="row mb-4">
+        <div class="col-md-6 mb-2">
+            <input type="text" id="search" class="form-control" placeholder="Produkte suchen...">
+        </div>
+        <div class="col-md-6 mb-2">
+            <select id="sort" class="form-select">
+                <option value="none">Sortierung: keine</option>
+                <option value="price-asc">Preis: aufsteigend</option>
+                <option value="price-desc">Preis: absteigend</option>
+                <option value="name-asc">Name: A–Z</option>
+                <option value="name-desc">Name: Z–A</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- PRODUKTE -->
+        <div class="col-md-8 mb-4">
+            <div id="product-list" class="row g-3">
+                <!-- Produkt-Karten kommen hier rein -->
+            </div>
+        </div>
+
+        <!-- WARENKORB -->
+        <div class="col-md-4">
+            <h2>Warenkorb</h2>
+
+            <ul id="cart-items" class="list-group mb-3">
+                <!-- Warenkorb-Positionen -->
+            </ul>
+
+            <p class="fw-bold">
+                Gesamt: <span id="cart-total">0.00</span> €
+            </p>
+
+            <button id="checkout" class="btn btn-success w-100">
+                Bestellung absenden
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- JAVASCRIPT -->
+<script>
+    const API_PRODUCTS = "/products"; // gleiche API wie Admin-Seite
+    const API_ORDERS = "/orders";
+
+
+    const messageBox = document.getElementById("message");
+    const searchInput = document.getElementById("search");
+    const sortSelect = document.getElementById("sort");
+    const productList = document.getElementById("product-list");
+    const cartItems = document.getElementById("cart-items");
+    const cartTotal = document.getElementById("cart-total");
+    const checkoutButton = document.getElementById("checkout");
+
+    let products = [];
+    let cart = [];
+
+    // Meldungen
+    function showMessage(type, text) {
+        messageBox.className = "alert alert-" + type;
+        messageBox.textContent = text;
+    }
+    function clearMessage() {
+        messageBox.className = "alert d-none";
+        messageBox.textContent = "";
+    }
+
+    // Produkte laden
+    async function loadProducts() {
+        try {
+            clearMessage();
+            const response = await fetch(API_PRODUCTS);
+
+            if (!response.ok) {
+                throw new Error("Fehler beim Laden der Produkte (Status " + response.status + ")");
+            }
+
+            products = await response.json();
+            renderProducts();
+
+        } catch (error) {
+            showMessage("danger", error.message);
+        }
+    }
+
+    // Produkte anzeigen (mit Filter & Sortierung)
+    function renderProducts() {
+        productList.innerHTML = "";
+
+        const searchTerm = searchInput.value.trim().toLowerCase();
+        const sortValue = sortSelect.value;
+
+        let filtered = products.filter(p =>
+            p.name.toLowerCase().includes(searchTerm)
+        );
+
+        // Sortierung
+        filtered.sort((a, b) => {
+            switch (sortValue) {
+                case "price-asc":
+                    return a.price - b.price;
+                case "price-desc":
+                    return b.price - a.price;
+                case "name-asc":
+                    return a.name.localeCompare(b.name);
+                case "name-desc":
+                    return b.name.localeCompare(a.name);
+                default:
+                    return 0;
+            }
+        });
+
+        // Karten bauen
+        filtered.forEach(p => {
+            const col = document.createElement("div");
+            col.className = "col-md-6";
+
+            col.innerHTML = `
+                <div class="card h-100">
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="card-title">${p.name}</h5>
+                        <p class="card-text mb-4">
+                            Preis: ${p.price.toFixed(2)} €
+                        </p>
+                        <button class="btn btn-primary mt-auto" data-id="${p.id}">
+                            In den Warenkorb
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            const btn = col.querySelector("button");
+            btn.addEventListener("click", () => addToCart(p));
+
+            productList.appendChild(col);
+        });
+
+        if (filtered.length === 0) {
+            productList.innerHTML = "<p>Keine Produkte gefunden.</p>";
+        }
+    }
+
+    // Warenkorb-Funktionen
+    function addToCart(product) {
+        const existing = cart.find(item => item.id === product.id);
+
+        if (existing) {
+            existing.quantity += 1;
+        } else {
+            cart.push({
+                id: product.id,
+                name: product.name,
+                price: product.price,
+                quantity: 1
+            });
+        }
+
+        renderCart();
+    }
+
+    function removeFromCart(productId) {
+        cart = cart.filter(item => item.id !== productId);
+        renderCart();
+    }
+
+    function changeQuantity(productId, delta) {
+        const item = cart.find(i => i.id === productId);
+        if (!item) return;
+
+        item.quantity += delta;
+        if (item.quantity <= 0) {
+            removeFromCart(productId);
+        } else {
+            renderCart();
+        }
+    }
+
+    function renderCart() {
+        cartItems.innerHTML = "";
+        let total = 0;
+
+        cart.forEach(item => {
+            const li = document.createElement("li");
+            li.className = "list-group-item d-flex justify-content-between align-items-center";
+
+            const itemTotal = item.price * item.quantity;
+            total += itemTotal;
+
+            li.innerHTML = `
+                <div>
+                    <strong>${item.name}</strong><br>
+                    Menge: ${item.quantity} &times; ${item.price.toFixed(2)} €
+                </div>
+                <div class="text-end">
+                    <div class="mb-1">${itemTotal.toFixed(2)} €</div>
+                    <button class="btn btn-sm btn-outline-secondary me-1" data-action="minus">-</button>
+                    <button class="btn btn-sm btn-outline-secondary me-1" data-action="plus">+</button>
+                    <button class="btn btn-sm btn-outline-danger" data-action="remove">x</button>
+                </div>
+            `;
+
+            const minusBtn = li.querySelector('[data-action="minus"]');
+            const plusBtn = li.querySelector('[data-action="plus"]');
+            const removeBtn = li.querySelector('[data-action="remove"]');
+
+            minusBtn.addEventListener("click", () => changeQuantity(item.id, -1));
+            plusBtn.addEventListener("click", () => changeQuantity(item.id, +1));
+            removeBtn.addEventListener("click", () => removeFromCart(item.id));
+
+            cartItems.appendChild(li);
+        });
+
+        cartTotal.textContent = total.toFixed(2);
+    }
+
+    // Bestellung absenden (mit Backend)
+checkoutButton.addEventListener("click", async () => {
+    if (cart.length === 0) {
+        showMessage("warning", "Der Warenkorb ist leer.");
+        return;
+    }
+
+    const customerName = prompt("Bitte deinen Namen eingeben:");
+    if (!customerName) {
+        showMessage("warning", "Name ist erforderlich, um die Bestellung zu speichern.");
+        return;
+    }
+
+    const items = cart.map(item => ({
+        productId: item.id,     // kommt aus deinem Warenkorb
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity
+    }));
+
+    const order = {
+        customerName,
+        items
+    };
+
+    try {
+        const response = await fetch(API_ORDERS, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(order)
+        });
+
+        if (!response.ok) {
+            throw new Error("Fehler beim Absenden der Bestellung (Status " + response.status + ")");
+        }
+
+        const savedOrder = await response.json();
+        showMessage("success", "Bestellung #" + savedOrder.id + " wurde gespeichert.");
+
+        cart = [];
+        renderCart();
+
+    } catch (error) {
+        showMessage("danger", error.message);
+    }
+});
+
+    // Events für Filter/Sortierung
+    searchInput.addEventListener("input", renderProducts);
+    sortSelect.addEventListener("change", renderProducts);
+
+    // Los geht's
+    loadProducts();
+</script>
+
+<!-- Bootstrap JS -->
+<script
+        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        crossorigin="anonymous">
+</script>
+
+</body>
+</html>

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Product Admin</title>
+
+    <!-- Bootstrap CSS über CDN -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+        crossorigin="anonymous"
+    >
+</head>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+
+        <!-- LINKS -->
+        <span class="navbar-text text-light fw-semibold">
+      Adminbereich
+    </span>
+
+        <!-- MITTE -->
+        <span class="navbar-brand mx-auto position-absolute start-50 translate-middle-x">
+      Produktverwaltung
+    </span>
+
+        <!-- RECHTS -->
+        <div class="d-flex align-items-center">
+            <a class="nav-link text-light me-3" href="orders.html">Bestellungen</a>
+            <a class="nav-link text-light me-3" href="shop.html">Shop</a>
+            <button
+                    class="btn btn-outline-light btn-sm"
+                    onclick="
+        localStorage.removeItem('user');
+        localStorage.removeItem('role');
+        window.location.href='login.html';
+    ">
+                Logout
+            </button>
+        </div>
+
+    </div>
+</nav>
+
+
+<!-- CONTENT -->
+<div class="container py-4">
+
+    <h1 class="mb-4">Produkte</h1>
+
+    <!-- 🔔 Meldungen -->
+    <div id="message" class="alert d-none" role="alert"></div>
+
+    <!-- PRODUKT-TABELLE -->
+    <table class="table table-striped table-bordered align-middle" id="products-table">
+        <thead class="table-dark">
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Preis</th>
+            <th>Aktion</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <!-- FORMULAR -->
+    <h2 id="form-title" class="mt-5">Neues Produkt hinzufügen</h2>
+
+    <form id="product-form" class="mt-3">
+        <input type="hidden" id="productId">
+
+        <div class="mb-3">
+            <label for="name" class="form-label">Name</label>
+            <input type="text" id="name" class="form-control" required>
+        </div>
+
+        <div class="mb-3">
+            <label for="price" class="form-label">Preis</label>
+            <input type="number" min="0" step="0.01" id="price" class="form-control" required>
+        </div>
+
+        <button type="submit" id="submit-button" class="btn btn-primary">Speichern</button>
+        <button type="button" id="cancel-edit" class="btn btn-secondary ms-2" style="display: none;">Abbrechen</button>
+    </form>
+</div>
+
+<!-- JAVASCRIPT -->
+<script>
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    if (!user || user.role !== "ADMIN") {
+        alert("Kein Zugriff. Bitte als Admin einloggen.");
+        location.href = "login.html";
+    }
+
+    const API = "http://localhost:8080/products";
+
+    // 🔔 Meldungen
+    const messageBox = document.getElementById("message");
+
+    function showMessage(type, text) {
+        messageBox.className = "alert alert-" + type;
+        messageBox.textContent = text;
+    }
+    function clearMessage() {
+        messageBox.className = "alert d-none";
+        messageBox.textContent = "";
+    }
+
+    // Produkte laden
+    async function loadProducts() {
+        try {
+            clearMessage();
+
+            const response = await fetch(API);
+            if (!response.ok) {
+                throw new Error("Fehler beim Laden der Produkte (Status " + response.status + ")");
+            }
+
+            const products = await response.json();
+            const tbody = document.querySelector("#products-table tbody");
+            tbody.innerHTML = "";
+
+            products.forEach(p => {
+                const tr = document.createElement("tr");
+
+                tr.innerHTML = `
+                    <td>${p.id}</td>
+                    <td>${p.name}</td>
+                    <td>${p.price.toFixed(2)} €</td>
+                    <td>
+                        <button class="btn btn-sm btn-warning me-2" data-action="edit" data-id="${p.id}">
+                            Bearbeiten
+                        </button>
+
+                        <button class="btn btn-sm btn-danger" data-action="delete" data-id="${p.id}">
+                            Löschen
+                        </button>
+                    </td>
+                `;
+
+                // Buttons aktivieren
+                const editBtn = tr.querySelector('button[data-action="edit"]');
+                const deleteBtn = tr.querySelector('button[data-action="delete"]');
+
+                editBtn.addEventListener("click", () => startEdit(p));
+
+                deleteBtn.addEventListener("click", async () => {
+                    if (!confirm(`Produkt "${p.name}" wirklich löschen?`)) return;
+
+                    await fetch(API + "/" + p.id, { method: "DELETE" });
+                    showMessage("success", "Produkt gelöscht.");
+                    loadProducts();
+                });
+
+                tbody.appendChild(tr);
+            });
+
+        } catch (error) {
+            showMessage("danger", error.message);
+        }
+    }
+
+    // FORM ELEMENTE
+    const form = document.getElementById("product-form");
+    const idInput = document.getElementById("productId");
+    const nameInput = document.getElementById("name");
+    const priceInput = document.getElementById("price");
+    const formTitle = document.getElementById("form-title");
+    const submitButton = document.getElementById("submit-button");
+    const cancelEditButton = document.getElementById("cancel-edit");
+
+    // EDIT STARTEN
+    function startEdit(product) {
+        idInput.value = product.id;
+        nameInput.value = product.name;
+        priceInput.value = product.price;
+
+        formTitle.textContent = "Produkt bearbeiten (ID " + product.id + ")";
+        submitButton.textContent = "Aktualisieren";
+        cancelEditButton.style.display = "inline-block";
+    }
+
+    // FORM RESET
+    function resetForm() {
+        idInput.value = "";
+        nameInput.value = "";
+        priceInput.value = "";
+
+        formTitle.textContent = "Neues Produkt hinzufügen";
+        submitButton.textContent = "Speichern";
+        cancelEditButton.style.display = "none";
+    }
+
+    cancelEditButton.addEventListener("click", resetForm);
+
+    // FORM ABSENDEN
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        clearMessage();
+
+        const name = nameInput.value;
+        const price = parseFloat(priceInput.value);
+        const id = idInput.value;
+
+        if (!name || isNaN(price) || price < 0) {
+            showMessage("danger", "Bitte gültige Eingaben machen.");
+            return;
+        }
+
+        const product = { name, price };
+
+        try {
+            if (id) {
+                // UPDATE
+                await fetch(API + "/" + id, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(product)
+                });
+
+                showMessage("success", "Produkt aktualisiert!");
+            } else {
+                // NEU
+                await fetch(API, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(product)
+                });
+
+                showMessage("success", "Produkt angelegt!");
+            }
+
+            resetForm();
+            loadProducts();
+
+        } catch (error) {
+            showMessage("danger", "Fehler: " + error.message);
+        }
+    });
+
+    loadProducts();
+</script>
+
+<!-- Bootstrap JS -->
+<script
+        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        crossorigin="anonymous">
+</script>
+
+<script>
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    if (!user) {
+        location.href = "login.html";
+    }
+
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+        localStorage.removeItem("user");
+        location.href = "login.html";
+    });
+</script>
+
+</body>
+</html>
+
+    
